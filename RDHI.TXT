@@ -1,0 +1,369 @@
+clc;
+clear;
+close all;
+
+% Read and preprocess the original image
+originalImage = imread('brain_mp.jpg');
+if size(originalImage, 3) == 3
+    originalImage = rgb2gray(originalImage);  % Convert to grayscale if RGB
+end
+imshow(originalImage);
+title('Original Image');
+imwrite(originalImage, 'originalImage.jpg');  % Save as .jpg
+
+% Calculate and display entropy for the original image
+originalEntropy = entropy(originalImage);
+disp(['Entropy of Original Image: ', num2str(originalEntropy)]);
+
+% Generate password from the original image
+password = generate_password(originalImage);
+disp(['Generated Password: ', password]);
+
+% Convert password to a numerical key
+key = generate_key_from_password(password);
+
+% Encryption using the generated key
+encryptedImage = bitxor(originalImage, key);  % XOR-based encryption
+figure, imshow(encryptedImage);
+title('Encrypted Image');
+imwrite(encryptedImage, 'encryptedImage.jpg');  % Save encrypted image
+
+% Calculate and display entropy and SSIM difference for encrypted image
+encryptedEntropy = entropy(encryptedImage);
+[ssim_encrypted, ~] = ssim(encryptedImage, originalImage);
+disp(['Entropy of Encrypted Image: ', num2str(encryptedEntropy)]);
+disp(['SSIM (Original vs Encrypted): ', num2str(ssim_encrypted)]);
+
+% Data for MSB Replacement
+data = [1 0 1 0 1 1 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  0 0 0 0];
+dataLength = length(data);
+imageSize = numel(encryptedImage);
+extractedData = zeros(1, dataLength);
+dataIndex = 1;
+
+
+% Data to hide using difference expansion technique
+secret_message = 'Reversible data hiding in encrypted images for medical applications involves embedding additional information into encrypted image data without compromising the original image quality or encryption security. This technique allows for the secure transmission and storage of sensitive medical images, such as X-rays or MRIs, while embedding critical metadata, patient information, or diagnostic results. The process is reversible, meaning the embedded data can be extracted without altering the original image. It ensures both privacy and integrity, crucial for medical data handling.';  % Example secret message
+binary_message = message_to_binary(secret_message);  % Convert to binary
+
+% MSB Replacement embedding
+embeddedImage_MSB = msb_embedding(encryptedImage, data, dataLength, imageSize);
+figure, imshow(embeddedImage_MSB);
+title('Encrypted Image with Embedded Data in MSBs');
+imwrite(embeddedImage_MSB, 'embeddedImage_MSB.jpg');  % Save the embedded image
+
+
+
+% Calculate and display entropy and SSIM difference for embedded MSB image
+embeddedEntropy_MSB = entropy(embeddedImage_MSB);
+[ssim_embedded_MSB, ~] = ssim(embeddedImage_MSB, originalImage);
+disp(['Entropy of Embedded Image (MSB): ', num2str(embeddedEntropy_MSB)]);
+disp(['SSIM (Original vs MSB Embedded): ', num2str(ssim_embedded_MSB)]);
+
+% Data Expansion embedding
+[stego_image_expansion, len_embedded_expansion] = embed_data_using_expansion(encryptedImage, binary_message);
+figure, imshow(stego_image_expansion);
+title('Stego Image with Data Embedded (Difference Expansion)');
+imwrite(stego_image_expansion, 'stego_image_expansion.jpg');
+
+% Calculate and display entropy and SSIM difference for data expansion stego image
+stegoEntropy_expansion = entropy(stego_image_expansion);
+[ssim_stego_expansion, ~] = ssim(stego_image_expansion, originalImage);
+disp(['Entropy of Stego Image (Difference Expansion): ', num2str(stegoEntropy_expansion)]);
+disp(['SSIM (Original vs Difference Expansion): ', num2str(ssim_stego_expansion)]);
+
+% Recover original image (from MSB Replacement)
+recoveredImage_MSB = bitxor(imread('embeddedImage_MSB.jpg'), key);
+figure, imshow(recoveredImage_MSB);
+title('Recovered Image (MSB Replacement)');
+imwrite(recoveredImage_MSB, 'recoveredImage_MSB.jpg');  % Save recovered image
+
+% Calculate and display entropy and SSIM difference for recovered MSB image
+recoveredEntropy_MSB = entropy(recoveredImage_MSB);
+[ssim_recovered_MSB, ~] = ssim(recoveredImage_MSB, originalImage);
+disp(['Entropy of Recovered Image (MSB): ', num2str(recoveredEntropy_MSB)]);
+disp(['SSIM (Original vs Recovered MSB): ', num2str(ssim_recovered_MSB)]);
+
+% Recover original image (from Data Expansion)
+decrypted_image_expansion = bitxor(stego_image_expansion, key);
+figure, imshow(decrypted_image_expansion);
+title('Recovered Image (Difference Expansion)');
+
+% Calculate and display entropy and SSIM difference for recovered Data Expansion image
+recoveredEntropy_expansion = entropy(decrypted_image_expansion);
+[ssim_recovered_expansion, ~] = ssim(decrypted_image_expansion, originalImage);
+disp(['Entropy of Recovered Image (Difference Expansion): ', num2str(recoveredEntropy_expansion)]);
+disp(['SSIM (Original vs Recovered Difference Expansion): ', num2str(ssim_recovered_expansion)]);
+
+% Calculate PSNR for MSB Replacement method
+MSE_MSB = mean((double(originalImage(:)) - double(recoveredImage_MSB(:))).^2);
+PSNR_MSB = 10 * log10((255^2) / MSE_MSB);  % PSNR calculation
+disp(['PSNR for MSB Replacement: ', num2str(PSNR_MSB), ' dB']);
+
+% Calculate PSNR for Difference Expansion method
+MSE_expansion = mean((double(originalImage(:)) - double(decrypted_image_expansion(:))).^2);
+PSNR_expansion = calculate_psnr(originalImage, decrypted_image_expansion);
+disp(['PSNR for Difference Expansion: ', num2str(PSNR_expansion), ' dB']);
+
+%% Function to calculate PSNR
+function PSNR = calculate_psnr(originalImage, recoveredImage)
+    MSE = mean((double(originalImage(:)) - double(recoveredImage(:))).^2);
+    if MSE == 0
+        PSNR = Inf;  % Perfect match
+    else
+        PSNR = 10 * log10((255^2) / MSE);
+    end
+end
+
+%% Functions for Password Generation
+function password = generate_password(image)
+    % Calculate average pixel value
+    avg_pixel = mean(image(:));
+    
+    % Convert to string and generate password
+    password = ['Img_', num2str(round(avg_pixel)), '_', datestr(now, 'yyyymmddHHMMSS')];
+end
+
+%% Function to generate a key from the password
+function key = generate_key_from_password(password)
+    % Use the password to generate a key (simple hash or numerical conversion)
+    key = mod(sum(double(password)), 256);  % Ensure the key is within byte range (0-255)
+end
+
+%% Functions for MSB Replacement
+function embeddedImage = msb_embedding(encryptedImage, data, dataLength, imageSize)
+    embeddedImage = encryptedImage;
+    dataIndex = 1;
+    for i = 1:imageSize
+        if dataIndex <= dataLength
+            % Replace the MSB (bit 8) of the pixel with the data bit
+            embeddedImage(i) = bitset(encryptedImage(i), 8, data(dataIndex));  % Set MSB
+            dataIndex = dataIndex + 1;
+        else
+            break;
+        end
+    end
+end
+
+function extractedData = msb_extraction(embeddedImage, dataLength, imageSize)
+    extractedData = zeros(1, dataLength);
+    dataIndex = 1;
+    for i = 1:imageSize
+        if dataIndex <= dataLength
+            % Extract the MSB (bit 8) of the pixel
+            extractedData(dataIndex) = bitget(embeddedImage(i), 8);  % Get MSB
+            dataIndex = dataIndex + 1;
+        else
+            break;
+        end
+    end
+end
+
+%% Functions for Difference Expansion
+function binary_message = message_to_binary(message)
+    binary_message = reshape(dec2bin(message, 8).', 1, []);  % 8-bit binary for each character
+end
+
+function message = binary_to_message(binary_data)
+    binary_data = reshape(binary_data, 8, [])';  % Split into 8-bit chunks
+    message = char(bin2dec(binary_data))';
+end
+
+function [stego_image, len_embedded] = embed_data_using_expansion(image, binary_data)
+    stego_image = image;
+    [rows, cols] = size(image);
+    max_capacity = rows * cols;
+    len_embedded = min(length(binary_data), max_capacity);  % Truncate if necessary
+    binary_index = 1;
+
+    for i = 1:rows
+        for j = 1:cols
+            if binary_index <= len_embedded
+                current_pixel = stego_image(i, j);
+                secret_bits = binary_data(binary_index:binary_index+1);  % Next 2 bits
+                new_pixel = bitshift(current_pixel, -2);  % Remove last 2 bits
+                new_pixel = bitor(bitshift(new_pixel, 2), bin2dec(secret_bits));  % Insert 2 bits
+                stego_image(i, j) = new_pixel;
+                binary_index = binary_index + 2;
+            else
+                break;
+            end
+        end
+        if binary_index > len_embedded
+            break;
+        end
+    end
+end
+
+function extracted_data = extract_data_using_expansion(image, len_embedded)
+    [rows, cols] = size(image);
+    extracted_data = '';
+    binary_index = 1;
+
+    for i = 1:rows
+        for j = 1:cols
+            if binary_index <= len_embedded
+                current_pixel = image(i, j);
+                extracted_bits = bitget(current_pixel, [1 2]);  % Extract 2 LSBs
+                extracted_data = [extracted_data, num2str(extracted_bits(2)), num2str(extracted_bits(1))];
+                binary_index = binary_index + 2;
+            else
+                break;
+            end
+        end
+        if binary_index > len_embedded
+            break;
+        end
+    end
+end
+function combinedImage = embed_msb_and_data_expansion(image, msb_data, binary_data)
+    % Embed both MSB Replacement data and Data Expansion into one image
+    [rows, cols] = size(image);
+    imageSize = numel(image);
+    combinedImage = image;
+
+    % MSB Replacement Embedding
+    msb_index = 1;
+    for i = 1:imageSize
+        if msb_index <= length(msb_data)
+            % Replace the MSB (bit 8) of the pixel with the MSB data
+            combinedImage(i) = bitset(combinedImage(i), 8, msb_data(msb_index));  % Set MSB
+            msb_index = msb_index + 1;
+        else
+            break;
+        end
+    end
+
+    % Difference Expansion Embedding
+    binary_index = 1;
+    max_capacity = rows * cols * 2;  % Each pixel can store 2 bits
+    len_embedded = min(length(binary_data), max_capacity);
+
+    for i = 1:rows
+        for j = 1:cols
+            if binary_index <= len_embedded
+                % Extract the next 2 bits from binary data
+                secret_bits = binary_data(binary_index:binary_index + 1);
+                current_pixel = combinedImage(i, j);
+                % Remove last 2 bits of pixel and insert secret bits
+                new_pixel = bitshift(current_pixel, -2);  % Remove 2 LSBs
+                new_pixel = bitor(bitshift(new_pixel, 2), bin2dec(secret_bits));  % Insert new 2 bits
+                combinedImage(i, j) = new_pixel;
+                binary_index = binary_index + 2;
+            else
+                break;
+            end
+        end
+        if binary_index > len_embedded
+            break;
+        end
+    end
+end
+% Generate combined output image with both MSB Replacement and Data Expansion
+combinedImage = embed_msb_and_data_expansion(encryptedImage, data, binary_message);
+
+% Display and save the combined output image
+figure, imshow(combinedImage);
+title('Combined Image (MSB + Difference Expansion)');
+imwrite(combinedImage, 'combinedImage.jpg');
+
+% Calculate entropy and SSIM for the combined image
+combinedEntropy = entropy(combinedImage);
+[ssim_combined, ~] = ssim(combinedImage, originalImage);
+disp(['Entropy of Combined Image: ', num2str(combinedEntropy)]);
+disp(['SSIM (Original vs Combined Image): ', num2str(ssim_combined)]);
+
+% Recover the original image from the combined image
+recovered_combined_image = bitxor(combinedImage, key);
+figure, imshow(recovered_combined_image);
+title('Recovered Combined Image');
+imwrite(recovered_combined_image, 'recoveredCombinedImage.jpg');
+
+% Calculate PSNR for the combined method
+MSE_combined = mean((double(originalImage(:)) - double(recovered_combined_image(:))).^2);
+PSNR_combined = 10 * log10((255^2) / MSE_combined);
+disp(['PSNR for Combined Method: ', num2str(PSNR_combined), ' dB']);
+
+extractedData_MSB = msb_extraction(imread('embeddedImage_MSB.jpg'), dataLength, imageSize);
+disp('Extracted Data from MSBs (MSB Replacement):');
+disp(extractedData_MSB);
+extracted_data_expansion = extract_data_using_expansion(stego_image_expansion, len_embedded_expansion);
+disp('Extracted Data (Data Expansion):');
+disp(binary_to_message(extracted_data_expansion));
+
+
+
+% Calculate entropy and SSIM for the recovered combined image
+recoveredCombinedEntropy = entropy(recovered_combined_image);
+[ssim_recovered_combined, ~] = ssim(recovered_combined_image, originalImage);
+disp(['Entropy of Recovered Combined Image: ', num2str(recoveredCombinedEntropy)]);
+disp(['SSIM (Original vs Recovered Combined): ', num2str(ssim_recovered_combined)]);%% Visualization: Entropy, SSIM, and PSNR Comparisons
+% Collect data
+imageLabelsEntropy = {'Original', 'Encrypted', 'Embedded MSB', 'Stego Expansion', ...
+    'Recovered MSB', 'Recovered Expansion', 'Combined', 'Recovered Combined'};
+entropyValues = [originalEntropy, encryptedEntropy, embeddedEntropy_MSB, ...
+    stegoEntropy_expansion, recoveredEntropy_MSB, recoveredEntropy_expansion, ...
+    combinedEntropy, recoveredCombinedEntropy];
+
+imageLabelsSSIM = {'Encrypted', 'Embedded MSB', 'Stego Expansion', ...
+    'Recovered MSB', 'Recovered Expansion', 'Combined', 'Recovered Combined'};
+ssimValues = [ssim_encrypted, ssim_embedded_MSB, ssim_stego_expansion, ...
+    ssim_recovered_MSB, ssim_recovered_expansion, ssim_combined, ssim_recovered_combined];
+
+imageLabelsPSNR = {'MSB Replacement', 'Data Expansion', 'Combined Method'};
+psnrValues = [PSNR_MSB, PSNR_expansion, PSNR_combined];
+
+% Plot Entropy Comparison
+figure('Name', 'Entropy Comparison');
+bar(entropyValues, 'FaceColor', [0.2 0.6 0.8]);
+set(gca, 'XTickLabel', imageLabelsEntropy, 'XTick', 1:length(imageLabelsEntropy));
+xtickangle(45);
+ylabel('Entropy');
+title('Entropy Across Images');
+grid on;
+
+% Plot SSIM Comparison
+figure('Name', 'SSIM Comparison');
+bar(ssimValues, 'FaceColor', [0.8 0.4 0.2]);
+set(gca, 'XTickLabel', imageLabelsSSIM, 'XTick', 1:length(imageLabelsSSIM));
+xtickangle(45);
+ylabel('SSIM (vs Original)');
+title('Structural Similarity Index (SSIM)');
+grid on;
+
+% Plot PSNR Comparison
+figure('Name', 'PSNR Comparison');
+bar(psnrValues, 'FaceColor', [0.3 0.7 0.3]);
+set(gca, 'XTickLabel', imageLabelsPSNR, 'XTick', 1:length(imageLabelsPSNR));
+ylabel('PSNR (dB)');
+title('Peak Signal-to-Noise Ratio (PSNR)');
+grid on;
+
+function plot_histogram_similarity(originalImg, recoveredImg)
+    % Plot histograms of original and recovered images for visual comparison
+    
+    figure('Name', 'Histogram Similarity: Original vs Recovered Combined');
+    
+    % Plot histogram of original image
+    subplot(1, 2, 1);
+    histogram(originalImg(:), 'BinEdges', 0:2:256, 'FaceColor', 'blue', 'FaceAlpha', 0.6);
+    xlabel('Pixel Intensity');
+    ylabel('Frequency');
+    title('Original Image Histogram');
+    grid on;
+    xlim([0 255]);
+    
+    % Plot histogram of recovered combined image
+    subplot(1, 2, 2);
+    histogram(recoveredImg(:), 'BinEdges', 0:2:256, 'FaceColor', 'red', 'FaceAlpha', 0.6);
+    xlabel('Pixel Intensity');
+    ylabel('Frequency');
+    title('Recovered Combined Image Histogram');
+    grid on;
+    xlim([0 255]);
+    
+    % Add a super-title for the figure
+    sgtitle('Pixel Intensity Distribution Comparison');
+end
+% Plot histogram similarity
+plot_histogram_similarity(originalImage, recovered_combined_image);
